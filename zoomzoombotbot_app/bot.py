@@ -4,7 +4,9 @@ import time
 from telebot import TeleBot
 from django.conf import settings
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from .models import Question, Animal
+from .models import *
+from django.conf import settings
+import os
 
 # Bot initialization
 bot = TeleBot(settings.TOKEN, threaded=False)
@@ -33,13 +35,23 @@ def handle_start(message):
 @bot.message_handler(content_types=['text'])
 def message_handler(message):
     chat_id = message.chat.id
-    if message.text == '\U0001F43E Prueba':
-        # Initialize the result storage for the user
+    user_input = message.text.strip()  # Strip any leading/trailing spaces or special characters
+
+    # Debugging message for testing
+    print(f"Received message from chat_id {chat_id}: {user_input}")
+
+    if user_input == '\U0001F43E Prueba' or user_input == '¿Intentar de nuevo?':
+        # Clear previous results for the user
         result[chat_id] = []
         animal_result[chat_id] = []
 
+        # Confirm reset (optional debugging message)
+        bot.send_message(chat_id, "¡Reiniciando la prueba!")
+
         # Start the first question
         ask_next_question(chat_id)
+    else:
+        bot.send_message(chat_id, "Por favor, selecciona una opción válida del menú.")
 
 
 # Function to ask the next question
@@ -69,38 +81,71 @@ def gen_markup(answers):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_answers(call):
     chat_id = call.message.chat.id
-    answer = call.data
+    answer = call.data  # The ID of the selected answer
     result[chat_id].append(answer)  # Store the user's answer
 
-    # Find the corresponding animal for the answer
-    question = Question.objects.get(order_in_test=len(result[chat_id]))
-    animal = Animal.objects.filter(answers__contains=[answer]).first()  # Get animal related to this answer
-    if animal:
-        animal_result[chat_id].append(animal.name)
+    try:
+        # Fetch the corresponding Answer and its related Animal
+        answer_obj = Answer.objects.get(id=answer)
+        animal = answer_obj.animal
+        if animal:
+            animal_result[chat_id].append(animal.name)
 
-    # Ask the next question or finish if this is the last question
-    if len(result[chat_id]) < Question.objects.count():
-        ask_next_question(chat_id)
-    else:
-        get_result(chat_id)
+        # Ask the next question or finish if this is the last question
+        if len(result[chat_id]) < Question.objects.count():
+            ask_next_question(chat_id)
+        else:
+            get_result(chat_id)
+    except Answer.DoesNotExist:
+        bot.send_message(chat_id, "Hubo un problema al procesar tu respuesta. Por favor, intenta nuevamente.")
 
 
 # Calculate the final result and Totem Animal
 def get_result(chat_id):
     # Calculate which animal got the most responses
     animal_counts = {animal: animal_result[chat_id].count(animal) for animal in set(animal_result[chat_id])}
-    totem_animal = max(animal_counts, key=animal_counts.get)  # Get animal with the most counts
+    totem_animal_name = max(animal_counts, key=animal_counts.get)  # Get animal with the most counts
 
-    # Send result message
-    result_message = f"Tu animal tótem es: {totem_animal} 🦁\n\nPara más detalles, puedes contactar al zoológico de Moscú:\n" \
-                     f"Teléfono: +7 (962) 971-38-75\nCorreo: zoofriends@moscowzoo.ru"
-    bot.send_message(chat_id, result_message)
+    try:
+        # Fetch the Animal object based on the totem animal name
+        totem_animal = Animal.objects.get(name=totem_animal_name)
+
+        # Construct the full file path
+        photo_path = os.path.join(settings.MEDIA_ROOT, str(totem_animal.picture))
+
+        # Print the photo path to the console for debugging
+        print(f"Photo path for totem animal: {photo_path}")
+
+        # Open and send the photo if the file exists
+        if os.path.exists(photo_path):
+            with open(photo_path, 'rb') as photo_animal:
+                bot.send_photo(chat_id, photo_animal)
+        else:
+            print(f"Photo not found at: {photo_path}")  # Log if the file is missing
+            bot.send_message(chat_id, "La imagen del animal no se encuentra en el servidor.")
+
+        # Send the result message
+        result_message = (
+            f"Tu animal tótem es: {totem_animal_name} 🦁\n\n"
+            f"Para más detalles, puedes contactar al zoológico de Moscú:\n"
+            f"Teléfono: +7 (962) 971-38-75\nCorreo: zoofriends@moscowzoo.ru"
+        )
+        bot.send_message(chat_id, result_message)
+
+    except Animal.DoesNotExist:
+        # Handle case where the animal is not found
+        bot.send_message(chat_id, "Hubo un problema al calcular tu resultado. Por favor, intenta nuevamente.")
+    except Exception as e:
+        # Catch any other errors for debugging
+        print(f"Error: {e}")
+        bot.send_message(chat_id, "Ocurrió un error inesperado. Por favor, contacta al administrador.")
 
     # Offer option to retry
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    retry_button = KeyboardButton('\U0001F425 ¿Intentar de nuevo?')
+    retry_button = KeyboardButton('¿Intentar de nuevo?')
     markup.add(retry_button)
     bot.send_message(chat_id, '¿Te gustaría intentarlo de nuevo?', reply_markup=markup)
+
 
 
 # Run the bot
