@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+from bot_zoo_project.key import MY_KEY
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-m8fsd0k$lv!il)gxq+ult3965+nx@jqp^oqh0r)^bf4#6$8w7)'
+SECRET_KEY = MY_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
