@@ -1,1 +1,1 @@
-MY_KEY = 'django-insecure-m8fsd0k$lv!il)gxq+ult3965+nx@jqp^oqh0r)^bf4#6$8w7)'
+MY_KEY = 'YOUR_KEY'
